@@ -34,13 +34,20 @@ export class AuthService {
     return this.supabase.auth.getSession();
   }
 
+  private getDummyEmail(username: string): string {
+    // Base64 encode the username to safely bypass Supabase's strict email character validation
+    // while guaranteeing unique mapping without collisions.
+    const safeStr = btoa(username).replace(/=/g, '');
+    return `${safeStr}@omni.system`;
+  }
+
   async signInWithUsername(username: string, password: string) {
-    const email = `${username}@omni.system`;
+    const email = this.getDummyEmail(username);
     return this.supabase.auth.signInWithPassword({ email, password });
   }
 
   async signUpWithUsername(username: string, password: string) {
-    const email = `${username}@omni.system`;
+    const email = this.getDummyEmail(username);
     return this.supabase.auth.signUp({ email, password });
   }
 
