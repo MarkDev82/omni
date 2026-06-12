@@ -1,0 +1,24 @@
+{
+  "name": "@omni/api",
+  "version": "1.0.0",
+  "description": "Omni Vercel Serverless Functions",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "firebase-admin": "^12.0.0",
+    "zod": "^3.22.4",
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "typescript": "^5.3.3",
+    "vercel": "^33.0.0"
+  }
+}

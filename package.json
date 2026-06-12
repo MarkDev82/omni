@@ -1,0 +1,17 @@
+{
+  "name": "omni-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Omni device recovery system",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "install:all": "npm install",
+    "start:web": "npm run start --workspace=apps/web",
+    "build:web": "npm run build --workspace=apps/web",
+    "start:api": "npm run dev --workspace=apps/api",
+    "build:api": "npm run build --workspace=apps/api"
+  }
+}

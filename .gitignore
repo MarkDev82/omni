@@ -1,0 +1,38 @@
+# Dependency directories
+node_modules/
+/jspm_packages/
+
+# Build outputs
+dist/
+tmp/
+out/
+.next/
+.nuxt/
+.vercel/
+
+# IDE files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment variables & secrets (CRITICAL)
+.env
+.env.local
+.env.*.local
+*.env
+supabase/secrets.json
+firebase-service-account.json
+
+# Angular specfic files
+.angular/
+/apps/web/src/environments/environment.prod.ts
+/apps/web/src/environments/environment.ts
