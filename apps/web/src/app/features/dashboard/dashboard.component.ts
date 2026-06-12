@@ -25,17 +25,40 @@ import { environment } from '../../../environments/environment';
       
       <main class="main-content">
         <header class="topbar">
-          <h2>Your Devices</h2>
+          <h2>{{ selectedDevice() ? 'Device Details' : 'Your Devices' }}</h2>
         </header>
         
-        <div class="content-area">
-          <div class="empty-state" *ngIf="!enrollmentPin()">
+        <div class="content-area" *ngIf="!selectedDevice()">
+          <div class="empty-state" *ngIf="!enrollmentPin() && devices().length === 0">
             <div class="card">
               <h3>No devices enrolled</h3>
               <p class="text-muted text-sm">Enroll your Android device to start tracking and recovering.</p>
               <button class="btn-primary mt-4" (click)="generatePin()" [disabled]="loadingPin()">
                 {{ loadingPin() ? 'Generating...' : 'Enroll Device' }}
               </button>
+            </div>
+          </div>
+
+          <div class="devices-grid" *ngIf="devices().length > 0 && !enrollmentPin()">
+            <div class="card device-card clickable" *ngFor="let device of devices()" (click)="selectedDevice.set(device)">
+              <div class="device-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                  <line x1="12" y1="18" x2="12.01" y2="18"></line>
+                </svg>
+              </div>
+              <div class="device-info">
+                <h3>{{ device.model_name || 'Android Device' }}</h3>
+                <p class="text-muted text-sm">Android {{ device.os_version }}</p>
+                <div class="status-badge active mt-4">
+                  <span class="dot"></span> Protected
+                </div>
+              </div>
+            </div>
+            
+            <div class="card add-device-card" (click)="generatePin()" *ngIf="!loadingPin()">
+              <div class="add-icon">+</div>
+              <p>Add Device</p>
             </div>
           </div>
 
@@ -48,6 +71,104 @@ import { environment } from '../../../environments/environment';
               </div>
               <p class="text-xs text-muted mt-4">This code expires in 15 minutes.</p>
               <button class="btn-text mt-4" (click)="enrollmentPin.set(null)">Cancel</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-area detail-view-area" *ngIf="selectedDevice()">
+          <button class="btn-back" (click)="selectedDevice.set(null)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            Back to Devices
+          </button>
+
+          <div class="device-detail-header">
+            <div class="device-icon large">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                <line x1="12" y1="18" x2="12.01" y2="18"></line>
+              </svg>
+            </div>
+            <div class="device-info-large">
+              <h2>{{ selectedDevice().model_name || 'Android Device' }}</h2>
+              <p class="text-muted">Android {{ selectedDevice().os_version }} &bull; Protected</p>
+              <p class="text-muted text-sm mt-1">ID: {{ selectedDevice().id }}</p>
+            </div>
+          </div>
+
+          <div class="actions-panel mt-4">
+            <h3 class="mb-4">Remote Commands</h3>
+            <div class="actions-grid">
+              
+              <div class="card action-card" (click)="sendCommand('lock')">
+                <div class="action-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                </div>
+                <div class="action-text">
+                  <h4>Lock Screen</h4>
+                  <p class="text-muted text-sm">Secure device immediately</p>
+                </div>
+                <div class="action-status" *ngIf="actionState() === 'lock'">
+                  <span class="loader" *ngIf="!actionSuccess()"></span>
+                  <span class="success-tick" *ngIf="actionSuccess()">✓</span>
+                </div>
+              </div>
+
+              <div class="card action-card" (click)="sendCommand('alarm')">
+                <div class="action-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                </div>
+                <div class="action-text">
+                  <h4>Sound Alarm</h4>
+                  <p class="text-muted text-sm">Play loud sound for 5 mins</p>
+                </div>
+                <div class="action-status" *ngIf="actionState() === 'alarm'">
+                  <span class="loader" *ngIf="!actionSuccess()"></span>
+                  <span class="success-tick" *ngIf="actionSuccess()">✓</span>
+                </div>
+              </div>
+
+              <div class="card action-card" (click)="sendCommand('location')">
+                <div class="action-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                </div>
+                <div class="action-text">
+                  <h4>Update Location</h4>
+                  <p class="text-muted text-sm">Force GPS refresh</p>
+                </div>
+                <div class="action-status" *ngIf="actionState() === 'location'">
+                  <span class="loader" *ngIf="!actionSuccess()"></span>
+                  <span class="success-tick" *ngIf="actionSuccess()">✓</span>
+                </div>
+              </div>
+
+              <div class="card action-card danger" (click)="initiateWipe()" *ngIf="!wipeConfirmState()">
+                <div class="action-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </div>
+                <div class="action-text">
+                  <h4>Erase Data</h4>
+                  <p class="text-muted text-sm">Factory reset device</p>
+                </div>
+              </div>
+
+              <div class="card action-card danger confirming" *ngIf="wipeConfirmState()">
+                <div class="action-text">
+                  <h4>Are you sure?</h4>
+                  <p class="text-sm">This cannot be undone.</p>
+                </div>
+                <div class="action-buttons">
+                  <button class="btn-text" (click)="cancelWipe($event)">Cancel</button>
+                  <button class="btn-primary danger" (click)="confirmWipe($event)">
+                    <span *ngIf="actionState() !== 'wipe'">Confirm Erase</span>
+                    <span class="loader white" *ngIf="actionState() === 'wipe' && !actionSuccess()"></span>
+                    <span *ngIf="actionState() === 'wipe' && actionSuccess()">Erased ✓</span>
+                  </button>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -171,6 +292,216 @@ import { environment } from '../../../environments/environment';
     }
     
     .btn-text:hover { color: var(--color-text-main); }
+
+    .devices-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 24px;
+    }
+
+    .device-card {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .device-icon {
+      background: rgba(0,0,0,0.04);
+      padding: 16px;
+      border-radius: var(--radius-md);
+      margin-bottom: 24px;
+      color: var(--color-text-main);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px;
+      border-radius: 100px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      background: rgba(0,0,0,0.04);
+      color: var(--color-text-muted);
+    }
+
+    .status-badge.active {
+      background: rgba(0, 180, 80, 0.1);
+      color: rgb(0, 160, 70);
+    }
+
+    .status-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .add-device-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border: 1px dashed var(--color-border);
+      background: transparent;
+      transition: all 0.2s;
+      min-height: 200px;
+      color: var(--color-text-muted);
+    }
+
+    .add-device-card:hover {
+      border-color: var(--color-text-muted);
+      color: var(--color-text-main);
+      background: rgba(0,0,0,0.01);
+    }
+
+    .add-icon {
+      font-size: 2rem;
+      font-weight: 300;
+      margin-bottom: 8px;
+    }
+    .btn-back {
+      background: transparent;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--color-text-muted);
+      font-weight: 500;
+      cursor: pointer;
+      padding: 0;
+      margin-bottom: 32px;
+      transition: color 0.2s;
+    }
+
+    .btn-back:hover {
+      color: var(--color-text-main);
+    }
+
+    .device-detail-header {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      margin-bottom: 48px;
+    }
+
+    .device-icon.large {
+      padding: 24px;
+      border-radius: var(--radius-lg);
+    }
+
+    .device-info-large h2 {
+      font-size: 2rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .mb-4 { margin-bottom: 16px; }
+    .mt-1 { margin-top: 4px; }
+
+    .actions-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+    }
+
+    .action-card {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 24px;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+    }
+
+    .action-card:hover {
+      border-color: var(--color-text-muted);
+      background: rgba(0,0,0,0.01);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+
+    .action-icon {
+      color: var(--color-text-main);
+    }
+
+    .action-card.danger:hover {
+      border-color: rgba(220, 50, 50, 0.4);
+      background: rgba(220, 50, 50, 0.02);
+    }
+
+    .action-card.danger .action-icon {
+      color: rgb(220, 50, 50);
+    }
+
+    .action-card.confirming {
+      flex-direction: column;
+      align-items: flex-start;
+      border-color: rgb(220, 50, 50);
+      background: rgba(220, 50, 50, 0.02);
+      transform: none;
+      box-shadow: none;
+      cursor: default;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      width: 100%;
+    }
+
+    .btn-primary.danger {
+      background: rgb(220, 50, 50);
+    }
+    
+    .btn-primary.danger:hover {
+      background: rgb(200, 40, 40);
+    }
+
+    .action-status {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+    }
+
+    .loader {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(0,0,0,0.1);
+      border-bottom-color: var(--color-text-main);
+      border-radius: 50%;
+      display: inline-block;
+      animation: rotation 1s linear infinite;
+    }
+
+    .loader.white {
+      border: 2px solid rgba(255,255,255,0.3);
+      border-bottom-color: #fff;
+    }
+
+    .success-tick {
+      color: rgb(0, 160, 70);
+      font-weight: bold;
+      font-size: 1.2rem;
+    }
+
+    @keyframes rotation {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .clickable {
+      cursor: pointer;
+    }
+    .clickable:hover {
+      border-color: var(--color-text-muted);
+      background: rgba(0,0,0,0.01);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
   `]
 })
 export class DashboardComponent {
@@ -179,6 +510,35 @@ export class DashboardComponent {
 
   enrollmentPin = signal<string | null>(null);
   loadingPin = signal<boolean>(false);
+  devices = signal<any[]>([]);
+  selectedDevice = signal<any>(null);
+
+  actionState = signal<string | null>(null);
+  actionSuccess = signal<boolean>(false);
+  wipeConfirmState = signal<boolean>(false);
+
+  ngOnInit() {
+    this.fetchDevices();
+  }
+
+  async fetchDevices() {
+    const { data: { session } } = await this.authService.getSession();
+    if (!session) return;
+
+    try {
+      const response = await fetch(`${environment.apiUrl}/devices`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      });
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        this.devices.set(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch devices', e);
+    }
+  }
 
   async generatePin() {
     this.loadingPin.set(true);
@@ -210,5 +570,53 @@ export class DashboardComponent {
   async logout() {
     await this.authService.signOut();
     this.router.navigate(['/login']);
+  }
+
+  // --- MOCK REMOTE COMMANDS ---
+
+  sendCommand(command: string) {
+    if (this.actionState()) return; // Prevent multiple clicks
+    
+    this.actionState.set(command);
+    this.actionSuccess.set(false);
+
+    // Mock API delay
+    setTimeout(() => {
+      this.actionSuccess.set(true);
+      
+      // Reset after showing success
+      setTimeout(() => {
+        this.actionState.set(null);
+        this.actionSuccess.set(false);
+      }, 2000);
+    }, 1500);
+  }
+
+  initiateWipe() {
+    if (this.actionState()) return;
+    this.wipeConfirmState.set(true);
+  }
+
+  cancelWipe(event: Event) {
+    event.stopPropagation();
+    this.wipeConfirmState.set(false);
+  }
+
+  confirmWipe(event: Event) {
+    event.stopPropagation();
+    if (this.actionState()) return;
+    
+    this.actionState.set('wipe');
+    this.actionSuccess.set(false);
+
+    setTimeout(() => {
+      this.actionSuccess.set(true);
+      setTimeout(() => {
+        this.wipeConfirmState.set(false);
+        this.actionState.set(null);
+        this.actionSuccess.set(false);
+        // Normally we'd remove the device from the list here
+      }, 2000);
+    }, 2000);
   }
 }

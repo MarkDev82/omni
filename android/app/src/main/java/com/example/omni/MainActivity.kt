@@ -7,18 +7,27 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.example.omni.ui.theme.OmniTheme
 
+import androidx.compose.runtime.*
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             OmniTheme {
-                EnrollmentScreen(
-                    onEnrollSuccess = { _, _ ->
-                        // Display success and in a real app, save to EncryptedSharedPreferences
-                        Toast.makeText(this, "Device Linked Successfully!", Toast.LENGTH_LONG).show()
-                    }
-                )
+                var isEnrolled by remember { mutableStateOf(false) }
+
+                if (isEnrolled) {
+                    ActiveScreen()
+                } else {
+                    EnrollmentScreen(
+                        onEnrollSuccess = { _, _ ->
+                            // Display success and switch to active screen
+                            Toast.makeText(this, "Device Linked Successfully!", Toast.LENGTH_LONG).show()
+                            isEnrolled = true
+                        }
+                    )
+                }
             }
         }
     }
