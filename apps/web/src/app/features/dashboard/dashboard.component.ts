@@ -1,7 +1,8 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-dashboard',
@@ -28,11 +29,25 @@ import { AuthService } from '../../core/auth/auth.service';
         </header>
         
         <div class="content-area">
-          <div class="empty-state">
+          <div class="empty-state" *ngIf="!enrollmentPin()">
             <div class="card">
               <h3>No devices enrolled</h3>
               <p class="text-muted text-sm">Enroll your Android device to start tracking and recovering.</p>
-              <button class="btn-primary mt-4">Enroll Device</button>
+              <button class="btn-primary mt-4" (click)="generatePin()" [disabled]="loadingPin()">
+                {{ loadingPin() ? 'Generating...' : 'Enroll Device' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="enrollment-state" *ngIf="enrollmentPin()">
+            <div class="card pin-card">
+              <h3>Enrollment Code</h3>
+              <p class="text-muted text-sm">Enter this 6-digit code in the Omni Android app to link your device.</p>
+              <div class="pin-display">
+                {{ enrollmentPin() }}
+              </div>
+              <p class="text-xs text-muted mt-4">This code expires in 15 minutes.</p>
+              <button class="btn-text mt-4" (click)="enrollmentPin.set(null)">Cancel</button>
             </div>
           </div>
         </div>
@@ -129,11 +144,68 @@ import { AuthService } from '../../core/auth/auth.service';
     }
 
     .mt-4 { margin-top: 16px; }
+
+    .pin-display {
+      font-size: 2.5rem;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-align: center;
+      margin: 24px 0;
+      padding: 24px;
+      background: var(--color-bg);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-border);
+      color: var(--color-text-main);
+    }
+
+    .pin-card {
+      max-width: 400px;
+      text-align: center;
+    }
+
+    .btn-text {
+      background: transparent;
+      padding: 8px 16px;
+      font-weight: 500;
+      color: var(--color-text-muted);
+    }
+    
+    .btn-text:hover { color: var(--color-text-main); }
   `]
 })
 export class DashboardComponent {
   private authService = inject(AuthService);
   private router = inject(Router);
+
+  enrollmentPin = signal<string | null>(null);
+  loadingPin = signal<boolean>(false);
+
+  async generatePin() {
+    this.loadingPin.set(true);
+    const { data: { session } } = await this.authService.getSession();
+    
+    if (!session) {
+      this.loadingPin.set(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`${environment.apiUrl}/enrollment/generate`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      });
+      const data = await response.json();
+      if (data.pin) {
+        this.enrollmentPin.set(data.pin);
+      }
+    } catch (e) {
+      console.error('Failed to generate PIN', e);
+    } finally {
+      this.loadingPin.set(false);
+    }
+  }
 
   async logout() {
     await this.authService.signOut();
