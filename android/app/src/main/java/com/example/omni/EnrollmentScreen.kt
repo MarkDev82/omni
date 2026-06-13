@@ -13,6 +13,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import com.google.firebase.messaging.FirebaseMessaging
+import android.util.Log
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,13 +73,26 @@ fun EnrollmentScreen(onEnrollSuccess: (String, String) -> Unit) {
                     if (pin.length == 6) {
                         isLoading = true
                         errorMessage = null
-                        coroutineScope.launch {
-                            val result = NetworkClient.redeemPin(pin)
-                            isLoading = false
-                            result.onSuccess { (deviceId, deviceSecret) ->
-                                onEnrollSuccess(deviceId, deviceSecret)
-                            }.onFailure { error ->
-                                errorMessage = "Invalid or expired PIN"
+                        
+                        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                            if (!task.isSuccessful) {
+                                Log.w("OmniFCM", "Fetching FCM registration token failed", task.exception)
+                                isLoading = false
+                                errorMessage = "Failed to initialize Firebase"
+                                return@addOnCompleteListener
+                            }
+
+                            val fcmToken = task.result
+                            Log.d("OmniFCM", "FCM Token: $fcmToken")
+
+                            coroutineScope.launch {
+                                val result = NetworkClient.redeemPin(pin, fcmToken)
+                                isLoading = false
+                                result.onSuccess { (deviceId, deviceSecret) ->
+                                    onEnrollSuccess(deviceId, deviceSecret)
+                                }.onFailure { error ->
+                                    errorMessage = "Invalid or expired PIN"
+                                }
                             }
                         }
                     }

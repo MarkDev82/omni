@@ -11,7 +11,7 @@ object NetworkClient {
     // 10.0.2.2 is the special IP to reach the localhost of the host machine from an Android emulator
     private const val BASE_URL = "http://10.0.2.2:3000/api"
 
-    suspend fun redeemPin(pin: String): Result<Pair<String, String>> = withContext(Dispatchers.IO) {
+    suspend fun redeemPin(pin: String, fcmToken: String? = null): Result<Pair<String, String>> = withContext(Dispatchers.IO) {
         try {
             val url = URL("$BASE_URL/enrollment/redeem")
             val connection = url.openConnection() as HttpURLConnection
@@ -26,6 +26,9 @@ object NetworkClient {
                 put("pin", pin)
                 put("model_name", android.os.Build.MODEL)
                 put("os_version", android.os.Build.VERSION.RELEASE)
+                if (fcmToken != null) {
+                    put("fcm_token", fcmToken)
+                }
             }.toString()
 
             val input = jsonInputString.toByteArray(Charsets.UTF_8)

@@ -31,6 +31,8 @@ desktop.ini
 *.env
 supabase/secrets.json
 firebase-service-account.json
+firebase-admin-key.json
+google-services.json
 
 # Angular specfic files
 .angular/

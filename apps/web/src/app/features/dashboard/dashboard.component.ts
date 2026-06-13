@@ -96,6 +96,14 @@ import { environment } from '../../../environments/environment';
               <p class="text-muted">Android {{ selectedDevice().os_version }} &bull; Protected</p>
               <p class="text-muted text-sm mt-1">ID: {{ selectedDevice().id }}</p>
             </div>
+            <div class="header-actions">
+              <button class="btn-text text-sm danger-text" (click)="unlinkDevice()" *ngIf="!unlinkConfirmState()">Unlink Device</button>
+              <div class="confirm-unlink" *ngIf="unlinkConfirmState()">
+                <span class="text-sm">Unlink?</span>
+                <button class="btn-text text-sm" (click)="unlinkConfirmState.set(false)">No</button>
+                <button class="btn-text text-sm danger-text" (click)="confirmUnlink()">Yes</button>
+              </div>
+            </div>
           </div>
 
           <div class="actions-panel mt-4">
@@ -397,6 +405,25 @@ import { environment } from '../../../environments/environment';
       margin-bottom: 8px;
     }
 
+    .header-actions {
+      margin-left: auto;
+    }
+
+    .danger-text {
+      color: rgb(220, 50, 50);
+    }
+    
+    .danger-text:hover {
+      color: rgb(200, 40, 40);
+    }
+
+    .confirm-unlink {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--color-text-muted);
+    }
+
     .mb-4 { margin-bottom: 16px; }
     .mt-1 { margin-top: 4px; }
 
@@ -516,6 +543,7 @@ export class DashboardComponent {
   actionState = signal<string | null>(null);
   actionSuccess = signal<boolean>(false);
   wipeConfirmState = signal<boolean>(false);
+  unlinkConfirmState = signal<boolean>(false);
 
   ngOnInit() {
     this.fetchDevices();
@@ -574,22 +602,43 @@ export class DashboardComponent {
 
   // --- MOCK REMOTE COMMANDS ---
 
-  sendCommand(command: string) {
+  async sendCommand(command: string) {
     if (this.actionState()) return; // Prevent multiple clicks
+    const device = this.selectedDevice();
+    if (!device) return;
     
     this.actionState.set(command);
     this.actionSuccess.set(false);
 
-    // Mock API delay
-    setTimeout(() => {
-      this.actionSuccess.set(true);
-      
-      // Reset after showing success
+    const { data: { session } } = await this.authService.getSession();
+    if (!session) return;
+
+    try {
+      const response = await fetch(`${environment.apiUrl}/actions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          device_id: device.id,
+          command: command
+        })
+      });
+
+      if (response.ok) {
+        this.actionSuccess.set(true);
+      } else {
+        console.error('Failed to send command:', await response.text());
+      }
+    } catch (e) {
+      console.error('Error sending command:', e);
+    } finally {
       setTimeout(() => {
         this.actionState.set(null);
         this.actionSuccess.set(false);
       }, 2000);
-    }, 1500);
+    }
   }
 
   initiateWipe() {
@@ -602,21 +651,70 @@ export class DashboardComponent {
     this.wipeConfirmState.set(false);
   }
 
-  confirmWipe(event: Event) {
+  async confirmWipe(event: Event) {
     event.stopPropagation();
     if (this.actionState()) return;
     
     this.actionState.set('wipe');
     this.actionSuccess.set(false);
 
+    const device = this.selectedDevice();
+    const { data: { session } } = await this.authService.getSession();
+    
+    if (device && session) {
+      try {
+        const response = await fetch(`${environment.apiUrl}/actions`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            device_id: device.id,
+            command: 'wipe'
+          })
+        });
+
+        if (response.ok) {
+          this.actionSuccess.set(true);
+        }
+      } catch (e) {
+        console.error('Error sending wipe command', e);
+      }
+    }
+
     setTimeout(() => {
-      this.actionSuccess.set(true);
-      setTimeout(() => {
-        this.wipeConfirmState.set(false);
-        this.actionState.set(null);
-        this.actionSuccess.set(false);
-        // Normally we'd remove the device from the list here
-      }, 2000);
+      this.wipeConfirmState.set(false);
+      this.actionState.set(null);
+      this.actionSuccess.set(false);
     }, 2000);
+  }
+
+  unlinkDevice() {
+    this.unlinkConfirmState.set(true);
+  }
+
+  async confirmUnlink() {
+    const device = this.selectedDevice();
+    const { data: { session } } = await this.authService.getSession();
+
+    if (device && session) {
+      try {
+        const response = await fetch(`${environment.apiUrl}/devices?id=${device.id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`
+          }
+        });
+
+        if (response.ok) {
+          this.unlinkConfirmState.set(false);
+          this.selectedDevice.set(null);
+          this.fetchDevices(); // Refresh list
+        }
+      } catch (e) {
+        console.error('Error unlinking device', e);
+      }
+    }
   }
 }
