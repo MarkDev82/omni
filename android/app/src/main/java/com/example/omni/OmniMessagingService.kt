@@ -13,6 +13,18 @@ import kotlinx.coroutines.launch
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.MediaPlayer
+import android.media.RingtoneManager
+import android.net.Uri
+
+object OmniAlarmState {
+    var mediaPlayer: MediaPlayer? = null
+}
 
 class OmniMessagingService : FirebaseMessagingService() {
 
@@ -39,8 +51,8 @@ class OmniMessagingService : FirebaseMessagingService() {
     private fun handleCommand(command: String?) {
         when (command) {
             "alarm" -> playAlarmSound()
-            "lock" -> showOverlay("DEVICE LOCKED")
-            "wipe" -> showOverlay("WIPING DATA...")
+            "lock" -> lockDevice()
+            "wipe" -> wipeDevice()
             "location" -> handleLocationUpdate()
             else -> Log.d("OmniFCM", "Unknown command: $command")
         }
@@ -91,23 +103,59 @@ class OmniMessagingService : FirebaseMessagingService() {
 
     private fun playAlarmSound() {
         try {
+            if (OmniAlarmState.mediaPlayer?.isPlaying == true) {
+                // Stop the alarm if it's already playing
+                OmniAlarmState.mediaPlayer?.stop()
+                OmniAlarmState.mediaPlayer?.release()
+                OmniAlarmState.mediaPlayer = null
+                Log.d("OmniFCM", "Alarm stopped via remote command")
+                return
+            }
+
+            // Force volume to max for the alarm stream
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0)
+
             val notification: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            val r = RingtoneManager.getRingtone(applicationContext, notification)
-            r.play()
-            // In a real app, you'd want to manage this sound (e.g. stop it after 5 mins)
+            OmniAlarmState.mediaPlayer = MediaPlayer().apply {
+                setDataSource(applicationContext, notification)
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                isLooping = true
+                prepare()
+                start()
+            }
+            Log.d("OmniFCM", "Alarm started via remote command")
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    private fun showOverlay(message: String) {
-        // For prototype purposes, we log it. A true overlay requires SYSTEM_ALERT_WINDOW permission
-        // and starting an overlay service or bringing an Activity to the front.
-        Log.d("OmniFCM", "OVERLAY REQUESTED: $message")
-        
-        // We can broadcast this to the MainActivity to show a dialog if it's open.
-        val intent = android.content.Intent("com.example.omni.COMMAND_RECEIVED")
-        intent.putExtra("message", message)
-        sendBroadcast(intent)
+    private fun lockDevice() {
+        Log.d("OmniFCM", "LOCK REQUESTED")
+        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val adminComponent = ComponentName(this, OmniDeviceAdminReceiver::class.java)
+        if (dpm.isAdminActive(adminComponent)) {
+            dpm.lockNow()
+        } else {
+            Log.w("OmniFCM", "Cannot lock device: Not a Device Admin")
+        }
+    }
+
+    private fun wipeDevice() {
+        Log.d("OmniFCM", "WIPE REQUESTED")
+        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val adminComponent = ComponentName(this, OmniDeviceAdminReceiver::class.java)
+        if (dpm.isAdminActive(adminComponent)) {
+            // 0 flag specifies to wipe data
+            dpm.wipeData(0)
+        } else {
+            Log.w("OmniFCM", "Cannot wipe device: Not a Device Admin")
+        }
     }
 }

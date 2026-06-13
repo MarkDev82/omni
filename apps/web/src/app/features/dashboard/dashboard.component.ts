@@ -135,8 +135,8 @@ import * as L from 'leaflet';
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
                 </div>
                 <div class="action-text">
-                  <h4>Sound Alarm</h4>
-                  <p class="text-muted text-sm">Play loud sound for 5 mins</p>
+                  <h4>Toggle Alarm</h4>
+                  <p class="text-muted text-sm">Start or stop ringing</p>
                 </div>
                 <div class="action-status" *ngIf="actionState() === 'alarm'">
                   <span class="loader" *ngIf="!actionSuccess()"></span>
