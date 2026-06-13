@@ -11,6 +11,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 
 class OmniMessagingService : FirebaseMessagingService() {
 
@@ -57,15 +59,18 @@ class OmniMessagingService : FirebaseMessagingService() {
                     // Check if permission is granted
                     if (ContextCompat.checkSelfPermission(applicationContext, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                         val fusedLocationClient = LocationServices.getFusedLocationProviderClient(applicationContext)
-                        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                            if (location != null) {
-                                CoroutineScope(Dispatchers.IO).launch {
-                                    NetworkClient.postLocation(deviceId, deviceSecret, location.latitude, location.longitude)
+                        val cancellationTokenSource = CancellationTokenSource()
+                        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.token)
+                            .addOnSuccessListener { location ->
+                                if (location != null) {
+                                    CoroutineScope(Dispatchers.IO).launch {
+                                        NetworkClient.postLocation(deviceId, deviceSecret, location.latitude, location.longitude)
+                                    }
+                                } else {
+                                    Log.d("OmniFCM", "Location is still null even with getCurrentLocation, sending mock")
+                                    postMockLocation(deviceId, deviceSecret)
                                 }
-                            } else {
-                                postMockLocation(deviceId, deviceSecret)
                             }
-                        }
                     } else {
                         Log.d("OmniFCM", "No location permission, sending mock location")
                         postMockLocation(deviceId, deviceSecret)

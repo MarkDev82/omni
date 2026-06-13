@@ -19,6 +19,10 @@ export default async function handler(req: Request, res: Response) {
         return res.status(400).json({ error: 'Missing device id parameter' });
       }
 
+      // Manually cascade delete dependent rows in case ON DELETE CASCADE is not set in Supabase
+      await supabaseAdmin.from('device_states').delete().eq('device_id', deviceId);
+      await supabaseAdmin.from('action_requests').delete().eq('device_id', deviceId);
+
       const { error } = await supabaseAdmin
         .from('devices')
         .delete()

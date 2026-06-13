@@ -47,7 +47,8 @@ export default async function handler(req: Request, res: Response) {
 
     // Insert action request into DB for history
     // Convert 'lock'/'alarm'/'location'/'wipe' to Enum values
-    const actionType = command.toUpperCase();
+    let actionType = command.toUpperCase();
+    if (actionType === 'LOCATION') actionType = 'LOCATE';
 
     const { data: actionReq, error: insertError } = await supabaseAdmin
       .from('action_requests')

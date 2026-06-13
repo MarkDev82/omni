@@ -1,4 +1,4 @@
-import { Component, inject, signal, effect } from '@angular/core';
+import { Component, inject, signal, effect, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
@@ -30,7 +30,12 @@ import * as L from 'leaflet';
         </header>
         
         <div class="content-area" *ngIf="!selectedDevice()">
-          <div class="empty-state" *ngIf="!enrollmentPin() && devices().length === 0">
+          <div class="empty-state" *ngIf="loadingDevices()">
+             <div class="loader"></div>
+             <p class="text-sm mt-4 text-muted">Loading your devices...</p>
+          </div>
+
+          <div class="empty-state" *ngIf="!loadingDevices() && !enrollmentPin() && devices().length === 0">
             <div class="card">
               <h3>No devices enrolled</h3>
               <p class="text-muted text-sm">Enroll your Android device to start tracking and recovering.</p>
@@ -181,10 +186,11 @@ import * as L from 'leaflet';
             </div>
           </div>
 
-          <div class="card map-card mt-4" *ngIf="deviceState()?.lat">
-            <h3 class="mb-4">Last Known Location</h3>
-            <div id="deviceMap" style="height: 300px; border-radius: var(--radius-md); overflow: hidden;"></div>
-            <p class="text-sm text-muted mt-4">Reported at: {{ deviceState()?.last_seen_at | date:'shortTime' }} on {{ deviceState()?.last_seen_at | date:'mediumDate' }}</p>
+          <div class="card map-card mt-4">
+            <h3 class="mb-4">Location Tracker</h3>
+            <div id="deviceMap" style="height: 300px; border-radius: var(--radius-md); overflow: hidden; background-color: #f4f4f4;"></div>
+            <p class="text-sm text-muted mt-4" *ngIf="deviceState()?.lat">Reported at: {{ deviceState()?.last_seen_at | date:'shortTime' }} on {{ deviceState()?.last_seen_at | date:'mediumDate' }}</p>
+            <p class="text-sm text-muted mt-4" *ngIf="!deviceState()?.lat">Waiting for location update...</p>
           </div>
         </div>
       </main>
@@ -538,10 +544,11 @@ import * as L from 'leaflet';
     }
   `]
 })
-export class DashboardComponent {
+export class DashboardComponent implements OnDestroy {
   private authService = inject(AuthService);
   private router = inject(Router);
 
+  loadingDevices = signal<boolean>(true);
   enrollmentPin = signal<string | null>(null);
   loadingPin = signal<boolean>(false);
   devices = signal<any[]>([]);
@@ -554,37 +561,120 @@ export class DashboardComponent {
   deviceState = signal<any>(null);
   private map: L.Map | null = null;
   private marker: L.Marker | L.CircleMarker | null = null;
+  private realtimeChannel: any = null;
+  private devicesChannel: any = null;
+  private autoTrackInterval: any = null;
 
   constructor() {
     effect(() => {
       const device = this.selectedDevice();
+      
+      if (this.autoTrackInterval) {
+        clearInterval(this.autoTrackInterval);
+        this.autoTrackInterval = null;
+      }
+
       if (device) {
         this.fetchDeviceState(device.id);
+        this.subscribeToDeviceUpdates(device.id);
+        
+        // Auto-tracking: silently refresh location every 30 seconds
+        this.autoTrackInterval = setInterval(() => {
+          this.sendSilentCommand('location', device.id);
+        }, 30000);
       } else {
         this.deviceState.set(null);
+        this.unsubscribeFromDeviceUpdates();
         if (this.map) {
           this.map.remove();
           this.map = null;
+          this.marker = null;
         }
       }
     });
 
     effect(() => {
       const state = this.deviceState();
-      if (state?.lat && state?.lng) {
-        // Need to wait for Angular to render the #deviceMap element
-        setTimeout(() => this.updateMap(state.lat, state.lng), 100);
-      }
+      // Wait for map container to render, then update
+      setTimeout(() => {
+        if (this.selectedDevice()) {
+          this.updateMap(state?.lat, state?.lng);
+        }
+      }, 100);
     });
   }
 
-  ngOnInit() {
-    this.fetchDevices();
+  async ngOnInit() {
+    await this.fetchDevices();
+    this.subscribeToNewDevices();
+  }
+
+  ngOnDestroy() {
+    this.unsubscribeFromDeviceUpdates();
+    if (this.devicesChannel) {
+      this.authService.client.removeChannel(this.devicesChannel);
+    }
+    if (this.autoTrackInterval) {
+      clearInterval(this.autoTrackInterval);
+    }
+  }
+
+  async subscribeToNewDevices() {
+    const { data: { session } } = await this.authService.getSession();
+    if (!session?.user?.id) return;
+
+    this.devicesChannel = this.authService.client
+      .channel('public:devices')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'devices', 
+        filter: `user_id=eq.${session.user.id}` 
+      }, payload => {
+        console.log('New device enrolled via Realtime!', payload);
+        this.enrollmentPin.set(null);
+        this.fetchDevices();
+      })
+      .subscribe();
+  }
+
+  subscribeToDeviceUpdates(deviceId: string) {
+    this.unsubscribeFromDeviceUpdates();
+
+    this.realtimeChannel = this.authService.client
+      .channel(`device_states_changes_${deviceId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'device_states',
+          filter: `device_id=eq.${deviceId}`
+        },
+        (payload: any) => {
+          console.log('Realtime update received:', payload);
+          if (payload.new && payload.new.lat) {
+            this.deviceState.set(payload.new);
+          }
+        }
+      )
+      .subscribe();
+  }
+
+  unsubscribeFromDeviceUpdates() {
+    if (this.realtimeChannel) {
+      this.authService.client.removeChannel(this.realtimeChannel);
+      this.realtimeChannel = null;
+    }
   }
 
   async fetchDevices() {
+    this.loadingDevices.set(true);
     const { data: { session } } = await this.authService.getSession();
-    if (!session) return;
+    if (!session) {
+      this.loadingDevices.set(false);
+      return;
+    }
 
     try {
       const response = await fetch(`${environment.apiUrl}/devices`, {
@@ -598,6 +688,8 @@ export class DashboardComponent {
       }
     } catch (e) {
       console.error('Failed to fetch devices', e);
+    } finally {
+      this.loadingDevices.set(false);
     }
   }
 
@@ -623,33 +715,37 @@ export class DashboardComponent {
     }
   }
 
-  updateMap(lat: number, lng: number) {
+  updateMap(lat?: number, lng?: number) {
     const mapElement = document.getElementById('deviceMap');
     if (!mapElement) return;
 
+    const hasLocation = lat !== undefined && lng !== undefined && lat !== null;
+
     if (!this.map) {
-      this.map = L.map('deviceMap').setView([lat, lng], 15);
+      this.map = L.map('deviceMap').setView(hasLocation ? [lat, lng] : [20, 0], hasLocation ? 15 : 2);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        attribution: '&copy; OpenStreetMap',
         subdomains: 'abcd',
         maxZoom: 20
       }).addTo(this.map);
     }
 
-    if (this.marker) {
-      this.marker.setLatLng([lat, lng]);
-    } else {
-      this.marker = L.circleMarker([lat, lng], {
-        radius: 8,
-        fillColor: '#2C2C2A',
-        color: '#fff',
-        weight: 2,
-        opacity: 1,
-        fillOpacity: 1
-      }).addTo(this.map);
+    if (hasLocation) {
+      if (this.marker) {
+        this.marker.setLatLng([lat, lng]);
+      } else {
+        this.marker = L.circleMarker([lat, lng], {
+          radius: 8,
+          fillColor: '#2C2C2A',
+          color: '#fff',
+          weight: 2,
+          opacity: 1,
+          fillOpacity: 1
+        }).addTo(this.map);
+      }
+      this.map.setView([lat, lng], 15);
     }
-
-    this.map.setView([lat, lng], 15);
+    
     setTimeout(() => this.map?.invalidateSize(), 100);
   }
 
@@ -726,6 +822,23 @@ export class DashboardComponent {
     }
   }
 
+  async sendSilentCommand(command: string, deviceId: string) {
+    const { data: { session } } = await this.authService.getSession();
+    if (!session) return;
+    try {
+      await fetch(`${environment.apiUrl}/actions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ device_id: deviceId, command: command })
+      });
+    } catch (e) {
+      console.error('Silent command failed', e);
+    }
+  }
+
   initiateWipe() {
     if (this.actionState()) return;
     this.wipeConfirmState.set(true);
@@ -785,6 +898,11 @@ export class DashboardComponent {
 
     if (device && session) {
       try {
+        // Optimistic UI Update for instant feedback
+        this.devices.set(this.devices().filter(d => d.id !== device.id));
+        this.unlinkConfirmState.set(false);
+        this.selectedDevice.set(null);
+
         const response = await fetch(`${environment.apiUrl}/devices?id=${device.id}`, {
           method: 'DELETE',
           headers: {
@@ -792,13 +910,13 @@ export class DashboardComponent {
           }
         });
 
-        if (response.ok) {
-          this.unlinkConfirmState.set(false);
-          this.selectedDevice.set(null);
-          this.fetchDevices(); // Refresh list
+        if (!response.ok) {
+          console.error('Failed to unlink device on server');
+          this.fetchDevices(); // Revert on failure
         }
       } catch (e) {
-        console.error('Error unlinking device', e);
+        console.error('Error during unlink', e);
+        this.fetchDevices(); // Revert on failure
       }
     }
   }
