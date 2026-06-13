@@ -5,6 +5,12 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import android.media.RingtoneManager
 import android.net.Uri
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import com.google.android.gms.location.LocationServices
 
 class OmniMessagingService : FirebaseMessagingService() {
 
@@ -33,8 +39,48 @@ class OmniMessagingService : FirebaseMessagingService() {
             "alarm" -> playAlarmSound()
             "lock" -> showOverlay("DEVICE LOCKED")
             "wipe" -> showOverlay("WIPING DATA...")
-            "location" -> Log.d("OmniFCM", "Location update requested")
+            "location" -> handleLocationUpdate()
             else -> Log.d("OmniFCM", "Unknown command: $command")
+        }
+    }
+
+    private fun handleLocationUpdate() {
+        Log.d("OmniFCM", "Location update requested")
+        
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val prefs = getSharedPreferences("OmniPrefs", MODE_PRIVATE)
+                val deviceId = prefs.getString("deviceId", null)
+                val deviceSecret = prefs.getString("deviceSecret", null)
+                
+                if (deviceId != null && deviceSecret != null) {
+                    // Check if permission is granted
+                    if (ContextCompat.checkSelfPermission(applicationContext, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(applicationContext)
+                        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                            if (location != null) {
+                                CoroutineScope(Dispatchers.IO).launch {
+                                    NetworkClient.postLocation(deviceId, deviceSecret, location.latitude, location.longitude)
+                                }
+                            } else {
+                                postMockLocation(deviceId, deviceSecret)
+                            }
+                        }
+                    } else {
+                        Log.d("OmniFCM", "No location permission, sending mock location")
+                        postMockLocation(deviceId, deviceSecret)
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun postMockLocation(deviceId: String, deviceSecret: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            // Mock coordinates (Paris, France)
+            NetworkClient.postLocation(deviceId, deviceSecret, 48.8566, 2.3522)
         }
     }
 

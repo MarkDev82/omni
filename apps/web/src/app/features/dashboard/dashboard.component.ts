@@ -1,8 +1,9 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { environment } from '../../../environments/environment';
+import * as L from 'leaflet';
 
 @Component({
   selector: 'app-dashboard',
@@ -178,6 +179,12 @@ import { environment } from '../../../environments/environment';
               </div>
 
             </div>
+          </div>
+
+          <div class="card map-card mt-4" *ngIf="deviceState()?.lat">
+            <h3 class="mb-4">Last Known Location</h3>
+            <div id="deviceMap" style="height: 300px; border-radius: var(--radius-md); overflow: hidden;"></div>
+            <p class="text-sm text-muted mt-4">Reported at: {{ deviceState()?.last_seen_at | date:'shortTime' }} on {{ deviceState()?.last_seen_at | date:'mediumDate' }}</p>
           </div>
         </div>
       </main>
@@ -544,6 +551,32 @@ export class DashboardComponent {
   actionSuccess = signal<boolean>(false);
   wipeConfirmState = signal<boolean>(false);
   unlinkConfirmState = signal<boolean>(false);
+  deviceState = signal<any>(null);
+  private map: L.Map | null = null;
+  private marker: L.Marker | L.CircleMarker | null = null;
+
+  constructor() {
+    effect(() => {
+      const device = this.selectedDevice();
+      if (device) {
+        this.fetchDeviceState(device.id);
+      } else {
+        this.deviceState.set(null);
+        if (this.map) {
+          this.map.remove();
+          this.map = null;
+        }
+      }
+    });
+
+    effect(() => {
+      const state = this.deviceState();
+      if (state?.lat && state?.lng) {
+        // Need to wait for Angular to render the #deviceMap element
+        setTimeout(() => this.updateMap(state.lat, state.lng), 100);
+      }
+    });
+  }
 
   ngOnInit() {
     this.fetchDevices();
@@ -566,6 +599,58 @@ export class DashboardComponent {
     } catch (e) {
       console.error('Failed to fetch devices', e);
     }
+  }
+
+  async fetchDeviceState(deviceId: string) {
+    const { data: { session } } = await this.authService.getSession();
+    if (!session) return;
+
+    try {
+      const response = await fetch(`${environment.apiUrl}/location?device_id=${deviceId}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      });
+      const data = await response.json();
+      if (data && data.lat) {
+        this.deviceState.set(data);
+      } else {
+        this.deviceState.set(null);
+      }
+    } catch (e) {
+      console.error('Failed to fetch device state', e);
+      this.deviceState.set(null);
+    }
+  }
+
+  updateMap(lat: number, lng: number) {
+    const mapElement = document.getElementById('deviceMap');
+    if (!mapElement) return;
+
+    if (!this.map) {
+      this.map = L.map('deviceMap').setView([lat, lng], 15);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 20
+      }).addTo(this.map);
+    }
+
+    if (this.marker) {
+      this.marker.setLatLng([lat, lng]);
+    } else {
+      this.marker = L.circleMarker([lat, lng], {
+        radius: 8,
+        fillColor: '#2C2C2A',
+        color: '#fff',
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 1
+      }).addTo(this.map);
+    }
+
+    this.map.setView([lat, lng], 15);
+    setTimeout(() => this.map?.invalidateSize(), 100);
   }
 
   async generatePin() {
