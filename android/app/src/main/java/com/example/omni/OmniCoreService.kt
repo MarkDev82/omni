@@ -13,6 +13,13 @@ import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.os.BatteryManager
+import android.os.SystemClock
+import android.content.IntentFilter
+import android.os.PowerManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.wifi.WifiManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.LocationServices
@@ -74,7 +81,65 @@ class OmniCoreService : Service() {
                             .addOnSuccessListener { location ->
                                 if (location != null) {
                                     CoroutineScope(Dispatchers.IO).launch {
-                                        NetworkClient.postLocation(deviceId, deviceSecret, location.latitude, location.longitude)
+                                        // TELEMETRY GATHERING
+                                        
+                                        // 1. Battery
+                                        val batteryStatus: Intent? = IntentFilter(Intent.ACTION_BATTERY_CHANGED).let { ifilter ->
+                                            applicationContext.registerReceiver(null, ifilter)
+                                        }
+                                        val batteryLevel: Int? = batteryStatus?.let { intent ->
+                                            val level: Int = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                                            val scale: Int = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                                            if (scale == 0) null else (level * 100 / scale.toFloat()).toInt()
+                                        }
+                                        val status: Int = batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+                                        val isCharging: Boolean = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
+
+                                        // 2. Screen State
+                                        val powerManager = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+                                        val screenOn = powerManager.isInteractive
+
+                                        // 3. Uptime
+                                        val uptimeSeconds = SystemClock.elapsedRealtime() / 1000
+
+                                        // 4. Speed
+                                        val speedMps = if (location.hasSpeed()) location.speed.toDouble() else 0.0
+
+                                        // 5. Network
+                                        var networkType = "offline"
+                                        var wifiSsid: String? = null
+                                        val connectivityManager = applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                                        val activeNetwork = connectivityManager.activeNetwork
+                                        val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork)
+
+                                        if (capabilities != null) {
+                                            if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                                                networkType = "wifi"
+                                                val wifiManager = applicationContext.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                                                val info = wifiManager.connectionInfo
+                                                if (info != null && info.ssid != null && info.ssid != "<unknown ssid>") {
+                                                    wifiSsid = info.ssid.replace("\"", "")
+                                                }
+                                            } else if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                                                networkType = "cellular"
+                                            } else if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+                                                networkType = "ethernet"
+                                            }
+                                        }
+
+                                        NetworkClient.postLocation(
+                                            deviceId = deviceId,
+                                            deviceSecret = deviceSecret,
+                                            lat = location.latitude,
+                                            lng = location.longitude,
+                                            batteryLevel = batteryLevel,
+                                            isCharging = isCharging,
+                                            networkType = networkType,
+                                            wifiSsid = wifiSsid,
+                                            screenOn = screenOn,
+                                            speedMps = speedMps,
+                                            uptimeSeconds = uptimeSeconds
+                                        )
                                     }
                                 } else {
                                     Log.d("OmniCore", "Location null, sending mock (Paris)")

@@ -112,6 +112,72 @@ import * as L from 'leaflet';
             </div>
           </div>
 
+          <div class="device-telemetry mt-4" *ngIf="deviceState()">
+            <div class="telemetry-grid">
+              
+              <!-- Battery -->
+              <div class="telemetry-item">
+                <div class="telemetry-icon" [class.charging]="deviceState().is_charging" [class.low]="deviceState().battery_level < 20">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="7" width="16" height="10" rx="2" ry="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line>
+                  </svg>
+                </div>
+                <div class="telemetry-details">
+                  <span class="telemetry-label">Battery</span>
+                  <span class="telemetry-value">
+                    {{ deviceState().battery_level !== null && deviceState().battery_level !== undefined ? deviceState().battery_level + '%' : 'Unknown' }}
+                    <span class="charging-text text-xs" *ngIf="deviceState().is_charging">(Charging)</span>
+                  </span>
+                </div>
+              </div>
+
+              <!-- Network -->
+              <div class="telemetry-item">
+                <div class="telemetry-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line>
+                  </svg>
+                </div>
+                <div class="telemetry-details">
+                  <span class="telemetry-label">Network</span>
+                  <span class="telemetry-value">
+                    <span style="text-transform: capitalize">{{ deviceState().network_type || 'Unknown' }}</span>
+                    <span class="text-xs" *ngIf="deviceState().wifi_ssid"> ({{ deviceState().wifi_ssid }})</span>
+                  </span>
+                </div>
+              </div>
+
+              <!-- Screen -->
+              <div class="telemetry-item">
+                <div class="telemetry-icon" [class.active]="deviceState().screen_on">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line>
+                  </svg>
+                </div>
+                <div class="telemetry-details">
+                  <span class="telemetry-label">Screen</span>
+                  <span class="telemetry-value">{{ deviceState().screen_on ? 'ON (Active)' : 'OFF (Locked)' }}</span>
+                </div>
+              </div>
+
+              <!-- Speed -->
+              <div class="telemetry-item">
+                <div class="telemetry-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                </div>
+                <div class="telemetry-details">
+                  <span class="telemetry-label">Movement</span>
+                  <span class="telemetry-value">
+                    {{ deviceState().speed_mps ? (deviceState().speed_mps * 3.6 | number:'1.0-0') + ' km/h' : 'Stationary' }}
+                  </span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
           <div class="actions-panel mt-4">
             <h3 class="mb-4">Remote Commands</h3>
             <div class="actions-grid">
@@ -439,6 +505,55 @@ import * as L from 'leaflet';
 
     .mb-4 { margin-bottom: 16px; }
     .mt-1 { margin-top: 4px; }
+
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .telemetry-item {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .telemetry-icon {
+      color: var(--color-text-muted);
+      background: rgba(0,0,0,0.03);
+      padding: 10px;
+      border-radius: 50%;
+      display: flex;
+    }
+
+    .telemetry-icon.charging { color: rgb(0, 180, 80); background: rgba(0, 180, 80, 0.1); }
+    .telemetry-icon.low { color: rgb(220, 50, 50); background: rgba(220, 50, 50, 0.1); }
+    .telemetry-icon.active { color: #007aff; background: rgba(0, 122, 255, 0.1); }
+
+    .telemetry-details {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .telemetry-label {
+      font-size: 0.8rem;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 2px;
+    }
+
+    .telemetry-value {
+      font-weight: 500;
+      color: var(--color-text-main);
+    }
+    
+    .charging-text { color: rgb(0, 180, 80); }
 
     .actions-grid {
       display: grid;

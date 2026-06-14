@@ -39,7 +39,7 @@ export default async function handler(req: Request, res: Response) {
       return res.status(400).json({ error: 'Malformed request body' });
     }
 
-    const { device_id, device_secret, lat, lng } = body;
+    const { device_id, device_secret, lat, lng, battery_level, is_charging, network_type, wifi_ssid, screen_on, speed_mps, uptime_seconds } = body;
     if (!device_id || !device_secret || lat === undefined || lng === undefined) {
       return res.status(400).json({ error: 'Missing parameters' });
     }
@@ -62,6 +62,13 @@ export default async function handler(req: Request, res: Response) {
         device_id: device_id,
         lat: lat,
         lng: lng,
+        battery_level: battery_level,
+        is_charging: is_charging,
+        network_type: network_type,
+        wifi_ssid: wifi_ssid,
+        screen_on: screen_on,
+        speed_mps: speed_mps,
+        uptime_seconds: uptime_seconds,
         last_seen_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }, { onConflict: 'device_id' });
