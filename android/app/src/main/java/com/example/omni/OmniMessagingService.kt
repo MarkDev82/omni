@@ -16,15 +16,7 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.AudioManager
-import android.media.MediaPlayer
-import android.media.RingtoneManager
-import android.net.Uri
-
-object OmniAlarmState {
-    var mediaPlayer: MediaPlayer? = null
-}
+import android.content.Intent
 
 class OmniMessagingService : FirebaseMessagingService() {
 
@@ -59,80 +51,25 @@ class OmniMessagingService : FirebaseMessagingService() {
     }
 
     private fun handleLocationUpdate() {
-        Log.d("OmniFCM", "Location update requested")
-        
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val prefs = getSharedPreferences("OmniPrefs", MODE_PRIVATE)
-                val deviceId = prefs.getString("deviceId", null)
-                val deviceSecret = prefs.getString("deviceSecret", null)
-                
-                if (deviceId != null && deviceSecret != null) {
-                    // Check if permission is granted
-                    if (ContextCompat.checkSelfPermission(applicationContext, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(applicationContext)
-                        val cancellationTokenSource = CancellationTokenSource()
-                        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.token)
-                            .addOnSuccessListener { location ->
-                                if (location != null) {
-                                    CoroutineScope(Dispatchers.IO).launch {
-                                        NetworkClient.postLocation(deviceId, deviceSecret, location.latitude, location.longitude)
-                                    }
-                                } else {
-                                    Log.d("OmniFCM", "Location is still null even with getCurrentLocation, sending mock")
-                                    postMockLocation(deviceId, deviceSecret)
-                                }
-                            }
-                    } else {
-                        Log.d("OmniFCM", "No location permission, sending mock location")
-                        postMockLocation(deviceId, deviceSecret)
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+        Log.d("OmniFCM", "Location update requested, forwarding to core service")
+        val serviceIntent = Intent(this, OmniCoreService::class.java).apply {
+            action = OmniCoreService.ACTION_UPDATE_LOCATION
         }
-    }
-
-    private fun postMockLocation(deviceId: String, deviceSecret: String) {
-        CoroutineScope(Dispatchers.IO).launch {
-            // Mock coordinates (Paris, France)
-            NetworkClient.postLocation(deviceId, deviceSecret, 48.8566, 2.3522)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
         }
     }
 
     private fun playAlarmSound() {
-        try {
-            if (OmniAlarmState.mediaPlayer?.isPlaying == true) {
-                // Stop the alarm if it's already playing
-                OmniAlarmState.mediaPlayer?.stop()
-                OmniAlarmState.mediaPlayer?.release()
-                OmniAlarmState.mediaPlayer = null
-                Log.d("OmniFCM", "Alarm stopped via remote command")
-                return
-            }
-
-            // Force volume to max for the alarm stream
-            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0)
-
-            val notification: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            OmniAlarmState.mediaPlayer = MediaPlayer().apply {
-                setDataSource(applicationContext, notification)
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build()
-                )
-                isLooping = true
-                prepare()
-                start()
-            }
-            Log.d("OmniFCM", "Alarm started via remote command")
-        } catch (e: Exception) {
-            e.printStackTrace()
+        val serviceIntent = Intent(this, OmniCoreService::class.java).apply {
+            action = OmniCoreService.ACTION_TOGGLE_ALARM
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
         }
     }
 

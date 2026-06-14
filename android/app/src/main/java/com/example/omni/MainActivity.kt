@@ -12,6 +12,8 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import android.os.Build
+import android.content.Intent
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,6 +32,7 @@ class MainActivity : ComponentActivity() {
                 var isEnrolled by remember { mutableStateOf(hasDevice) }
 
                 if (isEnrolled) {
+                    startOmniCore()
                     ActiveScreen()
                 } else {
                     EnrollmentScreen(
@@ -39,12 +42,24 @@ class MainActivity : ComponentActivity() {
                             prefs.edit().putString("deviceId", deviceId).putString("deviceSecret", deviceSecret).apply()
 
                             // Display success and switch to active screen
-                            Toast.makeText(this, "Device Linked Successfully!", Toast.LENGTH_LONG).show()
+                            Toast.makeText(this@MainActivity, "Device Linked Successfully!", Toast.LENGTH_LONG).show()
                             isEnrolled = true
+                            startOmniCore()
                         }
                     )
                 }
             }
+        }
+    }
+
+    private fun startOmniCore() {
+        val serviceIntent = Intent(this, OmniCoreService::class.java).apply {
+            action = OmniCoreService.ACTION_START_CORE
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
         }
     }
 }

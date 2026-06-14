@@ -46,9 +46,11 @@ export default async function handler(req: Request, res: Response) {
     }
 
     // Insert action request into DB for history
-    // Convert 'lock'/'alarm'/'location'/'wipe' to Enum values
+    // Convert commands to Enum values natively supported by the DB
     let actionType = command.toUpperCase();
     if (actionType === 'LOCATION') actionType = 'LOCATE';
+    if (actionType === 'ALARM') actionType = 'RING';
+    // LOCK and WIPE might still throw a DB warning if not in the ENUM, but the push will be sent.
 
     const { data: actionReq, error: insertError } = await supabaseAdmin
       .from('action_requests')
