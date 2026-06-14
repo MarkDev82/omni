@@ -54,7 +54,24 @@ class OmniCoreService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        startForeground(1, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= 34) { // UPSIDE_DOWN_CAKE
+                try {
+                    // Try to start with both LOCATION (8) and SPECIAL_USE (1073741824)
+                    startForeground(1, notification, 8 or 1073741824)
+                } catch (e: SecurityException) {
+                    Log.e("OmniCore", "Cannot start location FGS from background, falling back to specialUse", e)
+                    startForeground(1, notification, 1073741824)
+                }
+            } else if (Build.VERSION.SDK_INT >= 29) { // Q
+                startForeground(1, notification, 8)
+            } else {
+                startForeground(1, notification)
+            }
+        } catch (e: Exception) {
+            Log.e("OmniCore", "Fallback startForeground failed", e)
+            startForeground(1, notification)
+        }
 
         when (intent?.action) {
             ACTION_TOGGLE_ALARM -> toggleAlarm()

@@ -54,7 +54,7 @@ import * as L from 'leaflet';
                 </svg>
               </div>
               <div class="device-info">
-                <h3>{{ device.model_name || 'Android Device' }}</h3>
+                <h3>{{ device.alias || device.model_name || 'Android Device' }}</h3>
                 <p class="text-muted text-sm">Android {{ device.os_version }}</p>
                 <div class="status-badge active mt-4">
                   <span class="dot"></span> Protected
@@ -97,9 +97,28 @@ import * as L from 'leaflet';
                 <line x1="12" y1="18" x2="12.01" y2="18"></line>
               </svg>
             </div>
-            <div class="device-info-large">
-              <h2>{{ selectedDevice().model_name || 'Android Device' }}</h2>
+            <div class="device-info-large" *ngIf="!editingAlias()">
+              <div class="alias-header">
+                <h2>{{ selectedDevice().alias || selectedDevice().model_name || 'Android Device' }}</h2>
+                <button class="btn-icon text-muted" (click)="startEditingAlias()">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                </button>
+              </div>
               <p class="text-muted">Android {{ selectedDevice().os_version }} &bull; Protected</p>
+              <p class="text-muted text-sm mt-1">ID: {{ selectedDevice().id }}</p>
+            </div>
+            
+            <div class="device-info-large" *ngIf="editingAlias()">
+              <div class="alias-header">
+                <input type="text" class="alias-input" [value]="selectedDevice().alias || selectedDevice().model_name" #aliasInput (keydown.enter)="saveAlias(aliasInput.value)" (keyup.escape)="editingAlias.set(false)" autofocus>
+                <button class="btn-icon success-text" (click)="saveAlias(aliasInput.value)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </button>
+                <button class="btn-icon text-muted" (click)="editingAlias.set(false)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+              </div>
+              <p class="text-muted">Press Enter to save</p>
               <p class="text-muted text-sm mt-1">ID: {{ selectedDevice().id }}</p>
             </div>
             <div class="header-actions">
@@ -112,12 +131,12 @@ import * as L from 'leaflet';
             </div>
           </div>
 
-          <div class="device-telemetry mt-4" *ngIf="deviceState()">
+          <div class="device-telemetry mt-4">
             <div class="telemetry-grid">
               
               <!-- Battery -->
               <div class="telemetry-item">
-                <div class="telemetry-icon" [class.charging]="deviceState().is_charging" [class.low]="deviceState().battery_level < 20">
+                <div class="telemetry-icon" [class.charging]="deviceState()?.is_charging" [class.low]="deviceState()?.battery_level < 20">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="2" y="7" width="16" height="10" rx="2" ry="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line>
                   </svg>
@@ -125,15 +144,15 @@ import * as L from 'leaflet';
                 <div class="telemetry-details">
                   <span class="telemetry-label">Battery</span>
                   <span class="telemetry-value">
-                    {{ deviceState().battery_level !== null && deviceState().battery_level !== undefined ? deviceState().battery_level + '%' : 'Unknown' }}
-                    <span class="charging-text text-xs" *ngIf="deviceState().is_charging">(Charging)</span>
+                    {{ deviceState()?.battery_level !== null && deviceState()?.battery_level !== undefined ? deviceState()?.battery_level + '%' : '-- %' }}
+                    <span class="charging-text text-xs" *ngIf="deviceState()?.is_charging">(Charging)</span>
                   </span>
                 </div>
               </div>
 
               <!-- Network -->
               <div class="telemetry-item">
-                <div class="telemetry-icon">
+                <div class="telemetry-icon" [class.active]="deviceState()?.network_type">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line>
                   </svg>
@@ -141,28 +160,28 @@ import * as L from 'leaflet';
                 <div class="telemetry-details">
                   <span class="telemetry-label">Network</span>
                   <span class="telemetry-value">
-                    <span style="text-transform: capitalize">{{ deviceState().network_type || 'Unknown' }}</span>
-                    <span class="text-xs" *ngIf="deviceState().wifi_ssid"> ({{ deviceState().wifi_ssid }})</span>
+                    <span style="text-transform: capitalize">{{ deviceState()?.network_type || 'Waiting...' }}</span>
+                    <span class="text-xs" *ngIf="deviceState()?.wifi_ssid"> ({{ deviceState()?.wifi_ssid }})</span>
                   </span>
                 </div>
               </div>
 
               <!-- Screen -->
               <div class="telemetry-item">
-                <div class="telemetry-icon" [class.active]="deviceState().screen_on">
+                <div class="telemetry-icon" [class.active]="deviceState()?.screen_on">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line>
                   </svg>
                 </div>
                 <div class="telemetry-details">
                   <span class="telemetry-label">Screen</span>
-                  <span class="telemetry-value">{{ deviceState().screen_on ? 'ON (Active)' : 'OFF (Locked)' }}</span>
+                  <span class="telemetry-value">{{ deviceState()?.screen_on !== null && deviceState()?.screen_on !== undefined ? (deviceState()?.screen_on ? 'ON' : 'OFF') : 'Waiting...' }}</span>
                 </div>
               </div>
 
               <!-- Speed -->
               <div class="telemetry-item">
-                <div class="telemetry-icon">
+                <div class="telemetry-icon" [class.active]="deviceState()?.speed_mps > 0">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>
                   </svg>
@@ -170,7 +189,7 @@ import * as L from 'leaflet';
                 <div class="telemetry-details">
                   <span class="telemetry-label">Movement</span>
                   <span class="telemetry-value">
-                    {{ deviceState().speed_mps ? (deviceState().speed_mps * 3.6 | number:'1.0-0') + ' km/h' : 'Stationary' }}
+                    {{ deviceState()?.speed_mps !== null && deviceState()?.speed_mps !== undefined ? (deviceState()?.speed_mps * 3.6 | number:'1.0-0') + ' km/h' : 'Waiting...' }}
                   </span>
                 </div>
               </div>
@@ -478,10 +497,54 @@ import * as L from 'leaflet';
       border-radius: var(--radius-lg);
     }
 
+    .alias-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
     .device-info-large h2 {
       font-size: 2rem;
       font-weight: 600;
-      margin-bottom: 8px;
+    }
+
+    .btn-icon {
+      background: transparent;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+
+    .btn-icon:hover {
+      background: rgba(0,0,0,0.05);
+      color: var(--color-text-main) !important;
+    }
+    
+    .success-text {
+      color: rgb(0, 160, 70);
+    }
+
+    .alias-input {
+      font-size: 2rem;
+      font-weight: 600;
+      color: var(--color-text-main);
+      background: transparent;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 4px 12px;
+      max-width: 300px;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .alias-input:focus {
+      border-color: var(--color-text-muted);
     }
 
     .header-actions {
@@ -673,6 +736,7 @@ export class DashboardComponent implements OnDestroy {
   actionSuccess = signal<boolean>(false);
   wipeConfirmState = signal<boolean>(false);
   unlinkConfirmState = signal<boolean>(false);
+  editingAlias = signal<boolean>(false);
   deviceState = signal<any>(null);
   private map: L.Map | null = null;
   private marker: L.Marker | L.CircleMarker | null = null;
@@ -693,10 +757,10 @@ export class DashboardComponent implements OnDestroy {
         this.fetchDeviceState(device.id);
         this.subscribeToDeviceUpdates(device.id);
         
-        // Auto-tracking: silently refresh location every 30 seconds
+        // Auto-tracking: silently refresh location every 10 seconds
         this.autoTrackInterval = setInterval(() => {
           this.sendSilentCommand('location', device.id);
-        }, 30000);
+        }, 10000);
       } else {
         this.deviceState.set(null);
         this.unsubscribeFromDeviceUpdates();
@@ -894,6 +958,53 @@ export class DashboardComponent implements OnDestroy {
   async logout() {
     await this.authService.signOut();
     this.router.navigate(['/login']);
+  }
+
+  startEditingAlias() {
+    this.editingAlias.set(true);
+    // Autofocus is handled by HTML attribute
+  }
+
+  async saveAlias(newAlias: string) {
+    if (!newAlias.trim()) {
+      this.editingAlias.set(false);
+      return;
+    }
+
+    const device = this.selectedDevice();
+    const { data: { session } } = await this.authService.getSession();
+    if (!device || !session) return;
+
+    const oldAlias = device.alias;
+    const finalAlias = newAlias.trim();
+
+    // REAL Optimistic update: UI reacts instantly
+    this.selectedDevice.set({ ...device, alias: finalAlias });
+    this.devices.set(this.devices().map(d => d.id === device.id ? { ...d, alias: finalAlias } : d));
+    this.editingAlias.set(false); // Close input mode immediately
+
+    try {
+      const response = await fetch(`${environment.apiUrl}/devices`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id: device.id,
+          alias: finalAlias
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Server returned an error');
+      }
+    } catch (e) {
+      console.error('Failed to save alias', e);
+      // Revert if it fails silently
+      this.selectedDevice.set({ ...device, alias: oldAlias });
+      this.devices.set(this.devices().map(d => d.id === device.id ? { ...d, alias: oldAlias } : d));
+    }
   }
 
   // --- MOCK REMOTE COMMANDS ---
