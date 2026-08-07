@@ -50,6 +50,7 @@ export default async function handler(req: Request, res: Response) {
     let actionType = command.toUpperCase();
     if (actionType === 'LOCATION') actionType = 'LOCATE';
     if (actionType === 'ALARM') actionType = 'RING';
+    if (actionType === 'TAKE_PHOTO') actionType = 'TAKE_PHOTO';
     // LOCK and WIPE might still throw a DB warning if not in the ENUM, but the push will be sent.
 
     const { data: actionReq, error: insertError } = await supabaseAdmin

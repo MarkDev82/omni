@@ -3,9 +3,11 @@ package com.example.omni
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.File
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import android.util.Base64
 
 object NetworkClient {
     // 10.0.2.2 is the special IP to reach the localhost of the host machine from an Android emulator
@@ -98,6 +100,51 @@ object NetworkClient {
                 Result.success(Unit)
             } else {
                 Result.failure(Exception("Failed to post location: $responseCode"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun postPhoto(
+        deviceId: String,
+        deviceSecret: String,
+        photoFile: File,
+        cameraType: String = "front"
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("$BASE_URL/photos")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 30000 // 30 seconds for upload
+            connection.readTimeout = 30000
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("Accept", "application/json")
+            connection.doOutput = true
+
+            // Read file and encode to Base64
+            val bytes = photoFile.readBytes()
+            val base64Image = Base64.encodeToString(bytes, Base64.NO_WRAP)
+
+            val jsonObject = JSONObject().apply {
+                put("device_id", deviceId)
+                put("device_secret", deviceSecret)
+                put("camera_type", cameraType)
+                put("image_base64", base64Image)
+            }.toString()
+
+            val body = jsonObject.toByteArray(Charsets.UTF_8)
+            connection.setRequestProperty("Content-Length", body.size.toString())
+            connection.outputStream.use { os ->
+                os.write(body)
+                os.flush()
+            }
+
+            val responseCode = connection.responseCode
+            if (responseCode in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("Failed to post photo: $responseCode"))
             }
         } catch (e: Exception) {
             Result.failure(e)

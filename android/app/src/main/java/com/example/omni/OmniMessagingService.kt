@@ -46,6 +46,7 @@ class OmniMessagingService : FirebaseMessagingService() {
             "lock" -> lockDevice()
             "wipe" -> wipeDevice()
             "location" -> handleLocationUpdate()
+            "take_photo" -> handleTakePhoto()
             else -> Log.d("OmniFCM", "Unknown command: $command")
         }
     }
@@ -54,6 +55,18 @@ class OmniMessagingService : FirebaseMessagingService() {
         Log.d("OmniFCM", "Location update requested, forwarding to core service")
         val serviceIntent = Intent(this, OmniCoreService::class.java).apply {
             action = OmniCoreService.ACTION_UPDATE_LOCATION
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+    }
+
+    private fun handleTakePhoto() {
+        Log.d("OmniFCM", "Take photo requested, forwarding to core service")
+        val serviceIntent = Intent(this, OmniCoreService::class.java).apply {
+            action = OmniCoreService.ACTION_TAKE_PHOTO
         }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent)

@@ -63,8 +63,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkAndRequestPermissions() {
+        val permissionsNeeded = mutableListOf<String>()
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 100)
+            permissionsNeeded.add(Manifest.permission.ACCESS_FINE_LOCATION)
+            permissionsNeeded.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            permissionsNeeded.add(Manifest.permission.CAMERA)
+        }
+
+        if (permissionsNeeded.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, permissionsNeeded.toTypedArray(), 100)
         } else {
             checkBackgroundLocation()
         }

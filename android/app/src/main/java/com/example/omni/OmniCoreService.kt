@@ -3,7 +3,7 @@ package com.example.omni
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.Service
+import androidx.lifecycle.LifecycleService
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
@@ -27,18 +27,23 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
-import kotlinx.coroutines.CoroutineScope
+import android.content.pm.ServiceInfo
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-class OmniCoreService : Service() {
+class OmniCoreService : LifecycleService() {
     companion object {
         const val CHANNEL_ID = "OmniCoreChannel"
         const val ACTION_START_CORE = "ACTION_START_CORE"
         const val ACTION_TOGGLE_ALARM = "ACTION_TOGGLE_ALARM"
         const val ACTION_UPDATE_LOCATION = "ACTION_UPDATE_LOCATION"
+        const val ACTION_TAKE_PHOTO = "ACTION_TAKE_PHOTO"
         
         var mediaPlayer: MediaPlayer? = null
+        
+        // Keep a reference to the helper to prevent GC
+        private var cameraHelper: SilentCameraHelper? = null
     }
 
     override fun onCreate() {
@@ -57,14 +62,14 @@ class OmniCoreService : Service() {
         try {
             if (Build.VERSION.SDK_INT >= 34) { // UPSIDE_DOWN_CAKE
                 try {
-                    // Try to start with both LOCATION (8) and SPECIAL_USE (1073741824)
-                    startForeground(1, notification, 8 or 1073741824)
+                    // Try to start with LOCATION, SPECIAL_USE and CAMERA
+                    startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
                 } catch (e: SecurityException) {
                     Log.e("OmniCore", "Cannot start location FGS from background, falling back to specialUse", e)
-                    startForeground(1, notification, 1073741824)
+                    startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
                 }
             } else if (Build.VERSION.SDK_INT >= 29) { // Q
-                startForeground(1, notification, 8)
+                startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
             } else {
                 startForeground(1, notification)
             }
@@ -77,14 +82,16 @@ class OmniCoreService : Service() {
             ACTION_TOGGLE_ALARM -> toggleAlarm()
             ACTION_START_CORE -> Log.d("OmniCore", "Core service started/verified")
             ACTION_UPDATE_LOCATION -> fetchAndSendLocation()
+            ACTION_TAKE_PHOTO -> executeSilentPhotoCapture()
         }
 
+        super.onStartCommand(intent, flags, startId)
         return START_STICKY
     }
 
     private fun fetchAndSendLocation() {
         Log.d("OmniCore", "Fetching location in foreground service")
-        CoroutineScope(Dispatchers.IO).launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val prefs = getSharedPreferences("OmniPrefs", MODE_PRIVATE)
                 val deviceId = prefs.getString("deviceId", null)
@@ -97,7 +104,7 @@ class OmniCoreService : Service() {
                         fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.token)
                             .addOnSuccessListener { location ->
                                 if (location != null) {
-                                    CoroutineScope(Dispatchers.IO).launch {
+                                    lifecycleScope.launch(Dispatchers.IO) {
                                         // TELEMETRY GATHERING
                                         
                                         // 1. Battery
@@ -175,8 +182,40 @@ class OmniCoreService : Service() {
     }
 
     private fun postMockLocation(deviceId: String, deviceSecret: String) {
-        CoroutineScope(Dispatchers.IO).launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             NetworkClient.postLocation(deviceId, deviceSecret, 48.8566, 2.3522)
+        }
+    }
+
+    private fun executeSilentPhotoCapture() {
+        Log.d("OmniCore", "Executing silent photo capture")
+        
+        if (cameraHelper == null) {
+            cameraHelper = SilentCameraHelper(this)
+        }
+        
+        cameraHelper?.takeSilentPhoto(this) { photoFile ->
+            if (photoFile != null) {
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val prefs = getSharedPreferences("OmniPrefs", MODE_PRIVATE)
+                    val deviceId = prefs.getString("deviceId", null)
+                    val deviceSecret = prefs.getString("deviceSecret", null)
+
+                    if (deviceId != null && deviceSecret != null) {
+                        Log.d("OmniCore", "Uploading photo: ${photoFile.absolutePath}")
+                        val result = NetworkClient.postPhoto(deviceId, deviceSecret, photoFile, "front")
+                        if (result.isSuccess) {
+                            Log.d("OmniCore", "Photo uploaded successfully")
+                            // Clean up cache
+                            photoFile.delete()
+                        } else {
+                            Log.e("OmniCore", "Photo upload failed: ${result.exceptionOrNull()?.message}")
+                        }
+                    }
+                }
+            } else {
+                Log.e("OmniCore", "Failed to capture photo locally")
+            }
         }
     }
 
@@ -220,7 +259,10 @@ class OmniCoreService : Service() {
         }
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    override fun onBind(intent: Intent): IBinder? {
+        super.onBind(intent)
+        return null
+    }
 
     override fun onDestroy() {
         super.onDestroy()

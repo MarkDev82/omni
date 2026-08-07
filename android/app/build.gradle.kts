@@ -7,9 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.omni"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.omni"
@@ -58,6 +56,13 @@ dependencies {
 
     // Location Services
     implementation("com.google.android.gms:play-services-location:21.1.0")
+
+    // CameraX & Lifecycle Service
+    val cameraxVersion = "1.3.1"
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.lifecycle:lifecycle-service:2.7.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

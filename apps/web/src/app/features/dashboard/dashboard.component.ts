@@ -243,6 +243,22 @@ import * as L from 'leaflet';
                 </div>
               </div>
 
+              <div class="card action-card" (click)="sendCommand('take_photo')">
+                <div class="action-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle>
+                  </svg>
+                </div>
+                <div class="action-text">
+                  <h4>Silent Photo</h4>
+                  <p class="text-muted text-sm">Capture front camera</p>
+                </div>
+                <div class="action-status" *ngIf="actionState() === 'take_photo'">
+                  <span class="loader" *ngIf="!actionSuccess()"></span>
+                  <span class="success-tick" *ngIf="actionSuccess()">✓</span>
+                </div>
+              </div>
+
               <div class="card action-card danger" (click)="initiateWipe()" *ngIf="!wipeConfirmState()">
                 <div class="action-icon">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
@@ -276,6 +292,17 @@ import * as L from 'leaflet';
             <div id="deviceMap" style="height: 300px; border-radius: var(--radius-md); overflow: hidden; background-color: #f4f4f4;"></div>
             <p class="text-sm text-muted mt-4" *ngIf="deviceState()?.lat">Reported at: {{ deviceState()?.last_seen_at | date:'shortTime' }} on {{ deviceState()?.last_seen_at | date:'mediumDate' }}</p>
             <p class="text-sm text-muted mt-4" *ngIf="!deviceState()?.lat">Waiting for location update...</p>
+          </div>
+
+          <!-- Photo Gallery -->
+          <div class="card mt-4" *ngIf="devicePhotos().length > 0">
+            <h3 class="mb-4">Recent Captures</h3>
+            <div class="photo-gallery">
+              <div class="photo-item" *ngFor="let photo of devicePhotos()">
+                <img [src]="photo.url" alt="Device Capture">
+                <p class="text-xs text-muted mt-2">{{ photo.created_at | date:'short' }} ({{ photo.camera_type }})</p>
+              </div>
+            </div>
           </div>
         </div>
       </main>
@@ -720,6 +747,19 @@ import * as L from 'leaflet';
       transform: translateY(-2px);
       box-shadow: 0 4px 12px rgba(0,0,0,0.05);
     }
+    
+    .photo-gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 16px;
+    }
+    .photo-item img {
+      width: 100%;
+      border-radius: var(--radius-md);
+      aspect-ratio: 3/4;
+      object-fit: cover;
+      background: #000;
+    }
   `]
 })
 export class DashboardComponent implements OnDestroy {
@@ -738,10 +778,12 @@ export class DashboardComponent implements OnDestroy {
   unlinkConfirmState = signal<boolean>(false);
   editingAlias = signal<boolean>(false);
   deviceState = signal<any>(null);
+  devicePhotos = signal<any[]>([]);
   private map: L.Map | null = null;
   private marker: L.Marker | L.CircleMarker | null = null;
   private realtimeChannel: any = null;
   private devicesChannel: any = null;
+  private photosChannel: any = null;
   private autoTrackInterval: any = null;
 
   constructor() {
@@ -755,7 +797,9 @@ export class DashboardComponent implements OnDestroy {
 
       if (device) {
         this.fetchDeviceState(device.id);
+        this.fetchDevicePhotos(device.id);
         this.subscribeToDeviceUpdates(device.id);
+        this.subscribeToPhotos(device.id);
         
         // Auto-tracking: silently refresh location every 10 seconds
         this.autoTrackInterval = setInterval(() => {
@@ -763,6 +807,7 @@ export class DashboardComponent implements OnDestroy {
         }, 10000);
       } else {
         this.deviceState.set(null);
+        this.devicePhotos.set([]);
         this.unsubscribeFromDeviceUpdates();
         if (this.map) {
           this.map.remove();
@@ -845,6 +890,37 @@ export class DashboardComponent implements OnDestroy {
       this.authService.client.removeChannel(this.realtimeChannel);
       this.realtimeChannel = null;
     }
+    if (this.photosChannel) {
+      this.authService.client.removeChannel(this.photosChannel);
+      this.photosChannel = null;
+    }
+  }
+
+  async fetchDevicePhotos(deviceId: string) {
+    const { data } = await this.authService.client
+      .from('device_photos')
+      .select('*')
+      .eq('device_id', deviceId)
+      .order('created_at', { ascending: false });
+    this.devicePhotos.set(data || []);
+  }
+
+  subscribeToPhotos(deviceId: string) {
+    if (this.photosChannel) {
+      this.authService.client.removeChannel(this.photosChannel);
+    }
+    this.photosChannel = this.authService.client
+      .channel(`device_photos_changes_${deviceId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'device_photos',
+        filter: `device_id=eq.${deviceId}`
+      }, (payload: any) => {
+        console.log('New photo received via Realtime!', payload);
+        this.devicePhotos.set([payload.new, ...this.devicePhotos()]);
+      })
+      .subscribe();
   }
 
   async fetchDevices() {
